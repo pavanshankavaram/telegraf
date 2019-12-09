@@ -308,3 +308,11 @@
 [[override]]
   name = "github.com/satori/go.uuid"
   revision = "b2ce2384e17bbe0c6d34077efa39dbab3e09123b"
+  
+[[constraint]]
+  name = "k8s.io/client-go"
+  version = "v4.0.0-beta.0"
+  
+[[override]]
+  name = "k8s.io/apimachinery"
+  revision = "abe34e4f5b4413c282a83011892cbeea5b32223b"  
