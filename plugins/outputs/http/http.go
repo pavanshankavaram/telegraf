@@ -3,12 +3,27 @@ package http
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal"
@@ -72,6 +87,14 @@ const (
 	defaultMethod        = http.MethodPost
 )
 
+var (
+	wellKnownAzureArcManagementNamespace                       = "azure-arc"
+	wellKnownKubernetesSecret                                  = "azure-arc-connect-privatekey"
+	k8ClientSet                          *kubernetes.Clientset = nil
+	privateKey                           *rsa.PrivateKey
+	token                                string
+)
+
 type HTTP struct {
 	URL             string            `toml:"url"`
 	Timeout         internal.Duration `toml:"timeout"`
@@ -107,12 +130,10 @@ func (h *HTTP) createClient(ctx context.Context) (*http.Client, error) {
 		},
 		Timeout: h.Timeout.Duration,
 	}
-
-	if h.ClientID != "" && h.ClientSecret != "" && h.TokenURL != "" {
+	if h.ClientID != "" && h.ClientSecret != "" {
 		oauthConfig := clientcredentials.Config{
 			ClientID:     h.ClientID,
 			ClientSecret: h.ClientSecret,
-			TokenURL:     h.TokenURL,
 			Scopes:       h.Scopes,
 		}
 		ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
@@ -163,7 +184,6 @@ func (h *HTTP) Write(metrics []telegraf.Metric) error {
 	if err != nil {
 		return err
 	}
-
 	if err := h.write(reqBody); err != nil {
 		return err
 	}
@@ -204,6 +224,8 @@ func (h *HTTP) write(reqBody []byte) error {
 		}
 		req.Header.Set(k, v)
 	}
+	messageTobeSigned, signedMessage, err := getSharedKey()
+	req.Header.Set("Authorization", fmt.Sprintf("SharedKey %s:%s", messageTobeSigned, signedMessage))
 
 	resp, err := h.client.Do(req)
 	if err != nil {
@@ -219,6 +241,72 @@ func (h *HTTP) write(reqBody []byte) error {
 	return nil
 }
 
+func getSharedKey() (string, string, error) {
+	// sha256 the message
+	log.Printf("token : %s", token)
+	hashed := sha256.Sum256([]byte(token))
+	log.Printf("privateKey : %s", privateKey)
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed[:])
+	if err != nil {
+		return token, "", err
+	}
+	encodedSignature := base64.StdEncoding.EncodeToString([]byte(signature))
+	log.Printf("signature : %s", encodedSignature)
+	return token, encodedSignature, nil
+}
+
+func getK8ClientSet() (*kubernetes.Clientset, error) {
+	if k8ClientSet != nil {
+		return k8ClientSet, nil
+	}
+	// creates the in-cluster config
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	k8ClientSet = clientset
+	return k8ClientSet, nil
+}
+
+// GetSecret fetches secret.
+func GetSecret(wellKnownKubernetesSecret string) (*rsa.PrivateKey, error) {
+	clientset, err := getK8ClientSet()
+	if err != nil {
+		return nil, err
+	}
+
+	secret, err := clientset.CoreV1().Secrets(wellKnownAzureArcManagementNamespace).Get(wellKnownKubernetesSecret, metav1.GetOptions{})
+	if err != nil {
+		return nil, errors.New("Secret:" + wellKnownKubernetesSecret + " does not exists")
+	}
+	privateKeyInBytes := string(secret.Data["privateKey"])
+	privateKey, err := ParseRsaPrivateKeyFromPemStr([]byte(privateKeyInBytes))
+	if err != nil {
+		log.Printf("Parsing the Private Key failed : error {%v} ; secret's {name, namespace} Key : {%v}", err, privateKey)
+		return nil, err
+	}
+	return privateKey, err
+}
+
+// ParseRsaPrivateKeyFromPemStr gets rsa private key
+func ParseRsaPrivateKeyFromPemStr(privPEM []byte) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode(privPEM)
+	if block == nil {
+		return nil, fmt.Errorf("failed to parse PEM block containing the key")
+	}
+
+	priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return priv, nil
+}
+
 func init() {
 	outputs.Add("http", func() telegraf.Output {
 		return &HTTP{
@@ -227,4 +315,7 @@ func init() {
 			URL:     defaultURL,
 		}
 	})
+	secret, _ := GetSecret(wellKnownKubernetesSecret)
+	log.Println("Secret : ", secret)
+	privateKey = secret
 }
