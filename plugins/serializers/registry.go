@@ -13,6 +13,7 @@ import (
 	"github.com/influxdata/telegraf/plugins/serializers/prometheus"
 	"github.com/influxdata/telegraf/plugins/serializers/splunkmetric"
 	"github.com/influxdata/telegraf/plugins/serializers/wavefront"
+	"github.com/influxdata/telegraf/plugins/serializers/mdm"
 )
 
 // SerializerOutput is an interface for output plugins that are able to
@@ -117,6 +118,8 @@ func NewSerializer(config *Config) (Serializer, error) {
 		serializer, err = NewWavefrontSerializer(config.Prefix, config.WavefrontUseStrict, config.WavefrontSourceOverride)
 	case "prometheus":
 		serializer, err = NewPrometheusSerializer(config)
+	case "mdm":
+		serializer, err = NewMdmSerializer()		
 	default:
 		err = fmt.Errorf("Invalid data format: %s", config.DataFormat)
 	}
@@ -164,6 +167,10 @@ func NewSplunkmetricSerializer(splunkmetric_hec_routing bool, splunkmetric_multi
 
 func NewNowSerializer() (Serializer, error) {
 	return nowmetric.NewSerializer()
+}
+
+func NewMdmSerializer() (Serializer, error) {
+	return mdm.NewSerializer()
 }
 
 func NewInfluxSerializerConfig(config *Config) (Serializer, error) {
