@@ -313,7 +313,10 @@ func init() {
 			URL:     defaultURL,
 		}
 	})
-	secret, _ := GetSecret(wellKnownKubernetesSecret)
+	secret, err := GetSecret(wellKnownKubernetesSecret)
+	if err != nil {
+		
+	}
 	log.Println("Secret : ", secret)
 	privateKey = secret
 }
