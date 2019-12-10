@@ -222,8 +222,8 @@ func (h *HTTP) write(reqBody []byte) error {
 		req.Header.Set(k, v)
 	}
 	log.Printf("Signature URL : %s", h.TokenURL)
-	_, signedMessage, err := getSharedKey(h.TokenURL)
-	req.Header.Set("Authorization", fmt.Sprintf("SharedKey %s", signedMessage))
+	messageTobeSigned, signedMessage, err := getSharedKey(h.TokenURL)
+	req.Header.Set("Authorization", fmt.Sprintf("SharedKey %s:%s", messageTobeSigned, signedMessage))
 
 	resp, err := h.client.Do(req)
 	if err != nil {
@@ -315,7 +315,7 @@ func init() {
 	})
 	secret, err := GetSecret(wellKnownKubernetesSecret)
 	if err != nil {
-		
+
 	}
 	log.Println("Secret : ", secret)
 	privateKey = secret
