@@ -105,6 +105,7 @@ type HTTP struct {
 	TokenURL        string            `toml:"token_url"`
 	Scopes          []string          `toml:"scopes"`
 	ContentEncoding string            `toml:"content_encoding"`
+	signatureURL    string            `toml:"signature_url"`
 	tls.ClientConfig
 
 	client     *http.Client
@@ -221,7 +222,8 @@ func (h *HTTP) write(reqBody []byte) error {
 		}
 		req.Header.Set(k, v)
 	}
-	_, signedMessage, err := getSharedKey(h.TokenURL)
+	log.Printf("Signature URL : %s", h.signatureURL)
+	_, signedMessage, err := getSharedKey(h.signatureURL)
 	req.Header.Set("Authorization", fmt.Sprintf("SharedKey %s", signedMessage))
 
 	resp, err := h.client.Do(req)
@@ -245,11 +247,11 @@ func getSharedKey(tokenURL string) (string, string, error) {
 	log.Printf("privateKey : %s", privateKey)
 	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed[:])
 	if err != nil {
-		return token, "", err
+		return tokenURL, "", err
 	}
 	encodedSignature := base64.StdEncoding.EncodeToString([]byte(signature))
 	log.Printf("signature : %s", encodedSignature)
-	return token, encodedSignature, nil
+	return tokenURL, encodedSignature, nil
 }
 
 func getK8ClientSet() (*kubernetes.Clientset, error) {
