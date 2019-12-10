@@ -33,6 +33,10 @@ all:
 .PHONY: deps
 deps:
 	dep ensure -vendor-only
+	go get k8s.io/apimachinery/pkg/apis/meta/v1
+	go get k8s.io/client-go/kubernetes
+	go get k8s.io/client-go/rest
+	go get k8s.io/klog && cd /go/src/k8s.io/klog && git checkout v0.4.0
 
 .PHONY: telegraf
 telegraf:
