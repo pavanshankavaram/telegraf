@@ -221,8 +221,8 @@ func (h *HTTP) write(reqBody []byte) error {
 		}
 		req.Header.Set(k, v)
 	}
-	messageTobeSigned, signedMessage, err := getSharedKey(h.TokenURL)
-	req.Header.Set("Authorization", fmt.Sprintf("SharedKey %s:%s", messageTobeSigned, signedMessage))
+	_, signedMessage, err := getSharedKey(h.TokenURL)
+	req.Header.Set("Authorization", fmt.Sprintf("SharedKey %s", signedMessage))
 
 	resp, err := h.client.Do(req)
 	if err != nil {
