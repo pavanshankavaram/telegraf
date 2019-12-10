@@ -91,7 +91,6 @@ var (
 	wellKnownKubernetesSecret                                  = "azure-arc-connect-privatekey"
 	k8ClientSet                          *kubernetes.Clientset = nil
 	privateKey                           *rsa.PrivateKey
-	token                                string
 )
 
 type HTTP struct {
@@ -138,8 +137,6 @@ func (h *HTTP) createClient(ctx context.Context) (*http.Client, error) {
 		ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
 		client = oauthConfig.Client(ctx)
 	}
-	token = h.TokenURL
-
 	return client, nil
 }
 
@@ -224,7 +221,7 @@ func (h *HTTP) write(reqBody []byte) error {
 		}
 		req.Header.Set(k, v)
 	}
-	messageTobeSigned, signedMessage, err := getSharedKey()
+	messageTobeSigned, signedMessage, err := getSharedKey(h.TokenURL)
 	req.Header.Set("Authorization", fmt.Sprintf("SharedKey %s:%s", messageTobeSigned, signedMessage))
 
 	resp, err := h.client.Do(req)
@@ -241,10 +238,10 @@ func (h *HTTP) write(reqBody []byte) error {
 	return nil
 }
 
-func getSharedKey() (string, string, error) {
+func getSharedKey(tokenURL string) (string, string, error) {
 	// sha256 the message
-	log.Printf("token : %s", token)
-	hashed := sha256.Sum256([]byte(token))
+	log.Printf("token : %s", tokenURL)
+	hashed := sha256.Sum256([]byte(tokenURL))
 	log.Printf("privateKey : %s", privateKey)
 	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed[:])
 	if err != nil {
