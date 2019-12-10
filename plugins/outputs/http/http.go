@@ -105,7 +105,6 @@ type HTTP struct {
 	TokenURL        string            `toml:"token_url"`
 	Scopes          []string          `toml:"scopes"`
 	ContentEncoding string            `toml:"content_encoding"`
-	signatureURL    string            `toml:"signature_url"`
 	tls.ClientConfig
 
 	client     *http.Client
@@ -222,8 +221,8 @@ func (h *HTTP) write(reqBody []byte) error {
 		}
 		req.Header.Set(k, v)
 	}
-	log.Printf("Signature URL : %s", h.signatureURL)
-	_, signedMessage, err := getSharedKey(h.signatureURL)
+	log.Printf("Signature URL : %s", h.TokenURL)
+	_, signedMessage, err := getSharedKey(h.TokenURL)
 	req.Header.Set("Authorization", fmt.Sprintf("SharedKey %s", signedMessage))
 
 	resp, err := h.client.Do(req)
